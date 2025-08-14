@@ -1,0 +1,37 @@
+# Fichiers Python compilés
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+# Environnements virtuels
+venv/
+.env/
+env/
+.venv/
+
+# Configurations IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs et fichiers temporaires
+*.log
+*.tmp
+*.bak
+
+# Données locales (par exemple pour ARK)
+*.db
+*.sqlite
+*.csv
+
+# Cache de packages
+pip-wheel-metadata/
+*.egg-info/
+dist/
+build/
+
+# System files
+.DS_Store
+Thumbs.db

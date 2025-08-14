@@ -1,0 +1,6 @@
+# Ark Voice Assistant - Dépendances
+# Installation: pip install -r requirements.txt
+
+# Core dependencies
+speechrecognition>=3.10.0
+sentence-transformers>=5.1.0
