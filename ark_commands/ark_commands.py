@@ -1,6 +1,7 @@
 import os
 from typing import Optional
 from sentence_transformers import SentenceTransformer, util
+from ark_commands.utils import remove_accents
 
 class ARKCommands:
     def __init__(self, model: SentenceTransformer):
@@ -8,7 +9,7 @@ class ARKCommands:
 
         # Commandes avec phrase clé unique
         self.commands_map = {
-            "compte le nombre de fichiers dans le dossier": self._count_files_in_folder,
+            "compte le nombre de fichiers dans": self._count_files_in_folder,
             "liste les fichiers d’un dossier": self._list_files
         }
 
@@ -21,11 +22,6 @@ class ARKCommands:
             batch_size=32,    # au lieu de tout faire d’un coup
             show_progress_bar=False
         )
-
-        folder = "C:/Users/auvra/Images"
-        print(os.path.exists(folder))      # True si le chemin existe
-        print(os.access(folder, os.R_OK)) # True si tu peux lire le dossier
-
 
         # Dossier par défaut si aucun chemin trouvé
         self.default_base_path = os.path.expanduser("~")
@@ -46,18 +42,18 @@ class ARKCommands:
         return None
 
     def extract_folder_from_phrase(self, phrase: str, current_path: Optional[str] = None) -> str:
-        """Cherche un nom de dossier dans la phrase, dans le dossier courant."""
+        """Cherche un nom de dossier dans la phrase, dans le dossier courant (sans tenir compte des accents)."""
         current_path = current_path or self.default_base_path
 
         if "dans" not in phrase:
             return current_path
 
-        folder_name = phrase.split("dans", 1)[1].strip().lower()
+        folder_name = remove_accents(phrase.split("dans", 1)[1].strip().lower())
 
         try:
             for entry in os.listdir(current_path):
                 entry_path = os.path.join(current_path, entry)
-                if os.path.isdir(entry_path) and entry.lower() == folder_name:
+                if os.path.isdir(entry_path) and remove_accents(entry.lower()) == folder_name:
                     return entry_path
         except PermissionError:
             pass
