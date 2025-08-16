@@ -101,7 +101,7 @@ def main():
 
                 # Détection des commandes
                 result = commands.get_best_command(phrase)
-                if result:
+                if result is not None:
                     print("🤖 ARK :", result)
                 else:
                     # Utiliser les réponses prédéfinies

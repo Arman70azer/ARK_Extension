@@ -14,7 +14,7 @@ class ARKResponses:
         }
         
         # Phrase déclencheur pour la mise en veille
-        self.sleep_trigger = "dire au revoir ou demander à ARK de se mettre en veille"
+        self.sleep_trigger = "dire au revoir ou demander à ARK de se mettre en veille ou bien de se reposer ou de sleep"
         self.unknown_response = "Désolé, je n'ai pas compris. Peux-tu reformuler ?"
         
         # Pré-calculer les embeddings pour optimiser les performances

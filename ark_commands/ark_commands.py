@@ -1,85 +1,75 @@
 import os
-from typing import Optional
+from typing import Optional, List
 from sentence_transformers import SentenceTransformer, util
-from ark_commands.utils import remove_accents
+from ark_commands.subject_extractor import SubjectOfCommands, SubjectType, ExtractedSubject
 
 class ARKCommands:
-    def __init__(self, model: SentenceTransformer):
+    def __init__(self, model: SentenceTransformer, base_path: str = ""):
         self.model = model
+        self.subject_manager = SubjectOfCommands(model, base_path)
 
-        # Commandes avec phrase clé unique
-        self.commands_map = {
-            "compte le nombre de fichiers dans": self._count_files_in_folder,
-            "liste les fichiers d’un dossier": self._list_files
+        # Commandes avec contexte détaillé
+        self.commands = {
+            "combien de fichiers documents images dans le dossier": self._count_command,
+            "compter le nombre d'éléments fichiers photos vidéos": self._count_command,
+            "quel est le nombre total de documents pdf": self._count_command,
+            "lister afficher tous les fichiers du répertoire": self._list_command,
+            "montrer voir les documents images vidéos du dossier": self._list_command,
+            "afficher le contenu la liste des éléments": self._list_command,
+            "voir tous les fichiers photos dans le dossier": self._list_command
         }
+        
+        # Embeddings des commandes
+        self.cmd_embeddings = self.model.encode(list(self.commands.keys()))
 
-        # Préparer embeddings en numpy 2D pour éviter le warning
-        self.command_texts = list(self.commands_map.keys())
-        self.command_functions = list(self.commands_map.values())
-        self.command_embeddings = self.model.encode(
-            self.command_texts, 
-            convert_to_numpy=True, 
-            batch_size=32,    # au lieu de tout faire d’un coup
-            show_progress_bar=False
-        )
-
-        # Dossier par défaut si aucun chemin trouvé
-        self.default_base_path = os.path.expanduser("~")
-
-    def get_best_command(self, phrase: str, threshold: float = 0.6) -> Optional[str]:
-        """Détecte la commande et exécute avec le dossier trouvé."""
-        folder_path = self.extract_folder_from_phrase(phrase) or self.default_base_path
-
-        # Garder embedding 2D pour cos_sim
-        user_emb = self.model.encode([phrase], convert_to_numpy=True)  # shape = [1, dim]
-
-        # Calculer similarité cosinus
-        scores = util.cos_sim(user_emb, self.command_embeddings)[0]  # shape = [n_commands]
-        best_idx = scores.argmax()
-
-        if scores[best_idx] >= threshold:
-            return self.command_functions[best_idx](folder_path)
-        return None
-
-    def extract_folder_from_phrase(self, phrase: str, current_path: Optional[str] = None) -> str:
-        """Cherche un nom de dossier dans la phrase, dans le dossier courant (sans tenir compte des accents)."""
-        current_path = current_path or self.default_base_path
-
-        if "dans" not in phrase:
-            return current_path
-
-        folder_name = remove_accents(phrase.split("dans", 1)[1].strip().lower())
-
+    def get_best_command(self, phrase: str, threshold: float = 0.4) -> Optional[str]:
         try:
-            for entry in os.listdir(current_path):
-                entry_path = os.path.join(current_path, entry)
-                if os.path.isdir(entry_path) and remove_accents(entry.lower()) == folder_name:
-                    return entry_path
-        except PermissionError:
-            pass
+            # Analyser les sujets
+            subjects = self.subject_manager.analyze_phrase(phrase)
+            if not subjects:
+                return None
 
-        # Si rien trouvé, retourne le dossier courant
-        return current_path
+            # Détection de commande par IA
+            user_emb = self.model.encode([phrase])
+            scores = util.cos_sim(user_emb, self.cmd_embeddings)[0]
+            best_score = scores.max()
+            
+            if best_score >= threshold:
+                best_cmd = list(self.commands.keys())[scores.argmax()]
+                return self.commands[best_cmd](subjects)
+            
+            # Fallback par mots-clés - seulement si score IA pas trop bas
+            if best_score >= 0.2:  # Seuil minimal pour considérer le fallback
+                phrase_lower = phrase.lower()
+                if any(w in phrase_lower for w in ["combien", "nombre"]):
+                    return self._count_command(subjects)
+                elif any(w in phrase_lower for w in ["liste", "afficher", "voir"]):
+                    return self._list_command(subjects)
+            
+            # Demande incompatible avec ARKCommands
+            return None
+        except Exception:
+            # En cas d'erreur, retourner None plutôt que de planter
+            return None
 
+    def _count_command(self, subjects: List[ExtractedSubject]) -> str:
+        results = []
+        for subject in subjects:
+            count = self.subject_manager.count_by_subject(subject)
+            location = os.path.basename(subject.location) or "racine"
+            results.append(f"{count} {subject.subject_type.value} dans {location}")
+        return " | ".join(results)
 
-
-    # -------------------------
-    # Fonctions des commandes
-    # -------------------------
-    def _count_files_in_folder(self, folder_path: str):
-        try:
-            entries = os.listdir(folder_path)
-            return f"{len(entries)} éléments trouvés dans {folder_path}."
-        except FileNotFoundError:
-            return "Dossier introuvable."
-        except PermissionError:
-            return "Accès refusé."
-
-    def _list_files(self, folder_path: str):
-        try:
-            files = os.listdir(folder_path)
-            return "\n".join(files) if files else "Dossier vide."
-        except FileNotFoundError:
-            return "Dossier introuvable."
-        except PermissionError:
-            return "Accès refusé."
+    def _list_command(self, subjects: List[ExtractedSubject]) -> str:
+        results = []
+        for subject in subjects:
+            files = self.subject_manager.get_files_by_subject(subject)[:10]  # Max 10
+            location = os.path.basename(subject.location) or "racine"
+            
+            if files:
+                file_list = "\n".join([f"  • {f}" for f in files])
+                results.append(f"{subject.subject_type.value.title()} dans {location}:\n{file_list}")
+            else:
+                results.append(f"Aucun {subject.subject_type.value} dans {location}")
+        
+        return "\n\n".join(results)
